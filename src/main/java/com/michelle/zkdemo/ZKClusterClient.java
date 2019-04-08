@@ -1,5 +1,6 @@
 package com.michelle.zkdemo;
 
+import com.michelle.common.ZKScheduleTask;
 import org.apache.curator.RetryPolicy;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
@@ -7,6 +8,8 @@ import org.apache.curator.framework.recipes.leader.LeaderLatch;
 import org.apache.curator.framework.recipes.leader.LeaderLatchListener;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListenerAdapter;
+import org.apache.curator.framework.state.ConnectionState;
+import org.apache.curator.framework.state.ConnectionStateListener;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.apache.curator.utils.EnsurePath;
 import org.apache.zookeeper.CreateMode;
@@ -14,8 +17,15 @@ import org.apache.zookeeper.data.Stat;
 
 import java.util.concurrent.TimeUnit;
 
+/**
+ * @author michelle.min
+ */
 
-public class ZKClient {
+
+/**
+ * 使用zookeeper实现主从选举
+ */
+public class ZKClusterClient {
     private static final String appPath = "/qa_java_michelle_test";
     private static final String nodes = "nodes";
     private static final String master = "masterNode";
@@ -95,6 +105,7 @@ public class ZKClient {
 
     public void selectMasterLeaderLatch(ClusterNode clusterNode) throws Exception {
         LeaderLatch leaderLatch = new LeaderLatch(client, appPath + "/" + leaderlatchNode, clusterNode.getId());
+//        LeaderLatch leaderLatch = new LeaderLatch(client, appPath + "/" + leaderlatchNode, clusterNode.getId(), LeaderLatch.CloseMode.NOTIFY_LEADER); 如果leaderLatch.close被调用，leader被释放，则监听器会被通知，默认不通知
         leaderLatch.addListener(clusterNode.getLeaderLatchListener());
         leaderLatch.start();
         TimeUnit.SECONDS.sleep(5);
@@ -102,19 +113,20 @@ public class ZKClient {
     }
 
     public static void main(String[] args) throws Exception {
-        ZKClient zkClient = new ZKClient();
-        zkClient.schedule(1);
-        ZKClient zkClient2 = new ZKClient();
-        zkClient2.schedule(2);
+        ZKClusterClient zkClusterClient = new ZKClusterClient();
+        zkClusterClient.schedule(1);
+        ZKClusterClient zkClusterClient2 = new ZKClusterClient();
+        zkClusterClient2.schedule(2);
         TimeUnit.SECONDS.sleep(10);
-        zkClient.closeClient();
+        zkClusterClient.closeClient();
         TimeUnit.SECONDS.sleep(30);
-        zkClient2.closeClient();
+        zkClusterClient2.closeClient();
     }
 
     public void closeClient() {
         System.out.println("close node is:" + clusterNode.getId());
         client.close();
+        clusterNode.getZkScheduleTask().cloase();
     }
 
     public void schedule(int index) throws Exception {
@@ -133,6 +145,8 @@ public class ZKClient {
             @Override
             public void isLeader() {
                 System.out.println("I am a master node!My id is:" + node1.getId());
+                ZKScheduleTask zkScheduleTask = new ZKScheduleTask(index);
+                node1.setZkScheduleTask(zkScheduleTask);
             }
 
             @Override
@@ -144,6 +158,15 @@ public class ZKClient {
 //        zkClient.selectMasterLeaderSelector(node1);
 //        zkClient.selectMasterLeaderSelector(node2);
         this.selectMasterLeaderLatch(node1);
+        client.getConnectionStateListenable().addListener(new ConnectionStateListener() {  //使用ConnectionStateListener来处理客户端与zookeeper连接丢失的情况
+            @Override
+            public void stateChanged(CuratorFramework client, ConnectionState newState) {
+                if (newState == ConnectionState.LOST) {
+                    System.out.println("connection lost...");
+                    node1.getZkScheduleTask().cloase();
+                }
+            }
+        });
     }
 
 

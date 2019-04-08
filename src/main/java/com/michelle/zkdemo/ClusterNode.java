@@ -1,15 +1,21 @@
 package com.michelle.zkdemo;
 
+import com.michelle.common.ZKScheduleTask;
 import org.apache.curator.framework.recipes.leader.LeaderLatchListener;
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListener;
+
+/**
+ * @author michelle.min
+ */
 
 public class ClusterNode {
     private String id;
     private String masterNode;
     private String path;
-    private  int index;
+    private int index;
     private LeaderSelectorListener listener;
     private LeaderLatchListener leaderLatchListener;
+    private ZKScheduleTask zkScheduleTask;
 
     public String getId() {
         return id;
@@ -57,5 +63,13 @@ public class ClusterNode {
 
     public void setLeaderLatchListener(LeaderLatchListener leaderLatchListener) {
         this.leaderLatchListener = leaderLatchListener;
+    }
+
+    public ZKScheduleTask getZkScheduleTask() {
+        return zkScheduleTask;
+    }
+
+    public void setZkScheduleTask(ZKScheduleTask zkScheduleTask) {
+        this.zkScheduleTask = zkScheduleTask;
     }
 }
